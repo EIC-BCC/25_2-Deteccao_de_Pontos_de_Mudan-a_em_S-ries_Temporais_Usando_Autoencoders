@@ -89,11 +89,9 @@ install.packages(c("daltoolbox", "harbinger", "united", "ggplot2", "dplyr", "gri
 # Execução
 O repositório contém scripts modulares. A ordem recomendada de execução para reproduzir os resultados do TCC é:
 
-GLR_Baseline.R: Executa o método estatístico clássico (Baseline) para comparação.
+GLR.R: Executa o método estatístico clássico (Baseline) para comparação.
 
-CUSUM_Adaptativo.R: Demonstra o funcionamento isolado do supervisor estatístico na série bruta.
-
-AE_CUSUM_Final.R: Executa a solução final proposta (Integração completa).
+CUSUM+AE.R: Executa a solução final proposta (Integração completa).
 
 Para rodar qualquer um dos arquivos via terminal:
 ```bash
