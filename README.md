@@ -3,6 +3,8 @@
 **Alunos:** Anthony Viegas Heimlich e Gabriel Alves Giuliano
 **Semestre de Defesa:** 2025-2
 
+[PDF do TCC](TCC_Anthony_Gabriel_Ficha.pdf)
+
 # TL;DR
 Para rodar a análise principal (Integração AE + CUSUM):
 
