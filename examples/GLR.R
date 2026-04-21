@@ -36,11 +36,19 @@ glr_statistic <- function(x) {
 # DADOS
 # =========================================================
 
-data(oil_3w_Type_1)
+# Primeiro tenta carregar o arquivo local (completo, baixado manualmente)
+# Depois o data() como fallback da versão do pacote
+local_data <- "oil_3w_Type_1.RData"
+if (file.exists(local_data)) {
+  load(local_data)
+  cat("Carregado do arquivo local:", local_data, "\n")
+} else {
+  ("nao carregou")
+}
 
 # Escolha do Poço
-#df <- oil_3w_Type_1[["WELL-00001_20140124213136"]]
-df <- oil_3w_Type_1[["WELL-00002_20140126200050"]]
+df <- oil_3w_Type_1[["WELL-00001_20140124213136"]]
+#df <- oil_3w_Type_1[["WELL-00002_20140126200050"]]
 
 # Lista de sensores disponíveis
 sensor_list <- c("p_pdg", "p_tpt", "t_tpt", "p_mon_ckp", "t_jus_ckp", "p_jus_ckgl", "qgl")
@@ -138,6 +146,17 @@ cat("\nPrimeiro drift detectado em t =",
 # PREPARAÇÃO DOS DADOS PARA GRÁFICOS
 # =========================================================
 
+sensor_labels <- c(
+  p_pdg      = "Pressão de Fundo (PDG)",
+  p_tpt      = "Pressão de Cabeça (TPT)",
+  t_tpt      = "Temperatura de Cabeça (TPT)",
+  p_mon_ckp  = "Pressão Montante do Choke",
+  t_jus_ckp  = "Temperatura Jusante do Choke",
+  p_jus_ckgl = "Pressão Jusante GL",
+  qgl        = "Vazão de Gás Lift"
+)
+y_label <- sensor_labels[[series_name]] %||% series_name
+
 df_plot <- data.frame(
   Index  = 1:n,
   Series = series,
@@ -146,81 +165,115 @@ df_plot <- data.frame(
   Real   = labels
 )
 
-# Alarmes confirmados pelo GLR
 df_alarm <- df_plot[df_plot$Alarm == 1, ]
-
-# Eventos reais (ground truth)
 df_anom  <- df_plot[df_plot$Real == 1, ]
+
+delay_glr <- sapply(event_idx, function(e) {
+  det <- drift_indices[drift_indices >= e][1]
+  ifelse(is.na(det), NA, det - e)
+})
+
+detected <- sum(!is.na(delay_glr))
+total    <- length(event_idx)
+f1_val   <- round(cm$byClass["F1"], 4)
+prec_val <- round(cm$byClass["Precision"], 4)
+rec_val  <- round(cm$byClass["Sensitivity"], 4)
+subtitle_txt <- paste0(
+  "Detectados: ", detected, "/", total,
+  " | F1=", f1_val, " | Prec=", prec_val, " | Recall=", rec_val
+)
 
 # =========================================================
 # GRÁFICO 1 — SÉRIE TEMPORAL + GLR
 # =========================================================
 
 g1 <- ggplot(df_plot, aes(x = Index)) +
-  geom_line(aes(y = Series), color = "gray40") +
   
+  # Sombra de anomalia (mais suave)
+  geom_ribbon(
+    data = df_plot[df_plot$Real == 1, ],
+    aes(ymin = min(series, na.rm = TRUE),
+        ymax = max(series, na.rm = TRUE)),
+    fill = "#ff6b6b",
+    alpha = 0.05
+  ) +
+  
+  # Série principal (mais destaque)
+  geom_line(aes(y = Series),
+            color = "#1b4332",
+            size = 0.8) +
+  
+  # Alarmes GLR (mais discretos)
   geom_point(
     data = df_alarm,
-    aes(y = Series, color = "Alarme GLR"),
+    aes(y = Series),
+    color = "#d00000",
     shape = 17,
-    size = 3
+    size = 2.5
   ) +
   
+  # Anomalias reais (mais importantes)
   geom_point(
     data = df_anom,
-    aes(y = Series, color = "Anomalia Real"),
-    shape = 4,
-    size = 3
-  ) +
-  
-  scale_color_manual(
-    name = "Legenda",
-    values = c(
-      "Alarme GLR"    = "darkgreen",
-      "Anomalia Real" = "black"
-    )
+    aes(y = Series),
+    color = "#1a75ff",
+    shape = 16,
+    size = 3,
+    alpha = 0.8
   ) +
   
   labs(
-    title = paste("Série:", series_name, "- Alarmes GLR"),
-    y = "Valor",
-    x = "Índice"
+    title    = "Série Temporal — Detecção de Mudanças (GLR)",
+    subtitle = subtitle_txt,
+    x        = "Índice Temporal",
+    y        = y_label
   ) +
   
-  theme_minimal() +
-  theme(legend.position = "bottom")
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title    = element_text(face = "bold", size = 15),
+    plot.subtitle = element_text(size = 11, color = "gray30"),
+    axis.title    = element_text(size = 12),
+    axis.text     = element_text(size = 11),
+    panel.grid.minor = element_blank(),   # remove ruído
+    panel.grid.major = element_line(color = "gray85"),
+    legend.position = "none"
+  )
 
 # =========================================================
 # GRÁFICO 2 — ESTATÍSTICA GLR
 # =========================================================
 
-g2 <- ggplot(df_plot, aes(x = Index, y = GLR)) +
-  geom_line(color = "darkgreen") +
+g2 <- ggplot() +
+  geom_line(data = df_plot, aes(x = Index, y = GLR),
+            color = "#2c6e49", size = 0.6) +
   
   geom_hline(
     yintercept = GLR_THRESHOLD,
-    linetype = "dashed",
-    color = "red"
+    linetype = "dashed", color = "red", size = 0.8
   ) +
   
   labs(
     title = "Estatística GLR",
-    y = "GLR Score",
-    x = "Índice"
+    x     = "Índice Temporal",
+    y     = "Estatística GLR"
   ) +
   
-  theme_minimal()
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title       = element_text(size = 13, face = "bold"),
+    axis.title       = element_text(size = 11),
+    axis.text        = element_text(size = 10),
+    panel.grid.minor = element_line(color = "gray90"),
+    panel.grid.major = element_line(color = "gray80"),
+    legend.position  = "none"
+  )
 
-grid.arrange(g1, g2, ncol = 1, heights = c(1.2, 1))
-
+#grid.arrange(g1, g2, ncol = 1, heights = c(1.3, 1.1))
+grid.arrange(g1)
 # =========================================================
 # 7. AVALIAÇÃO DE DELAY (ATRASO)
 # =========================================================
-
-delay_glr <- sapply(event_idx, function(e) {
-  det <- drift_indices[drift_indices >= e][1]
-  ifelse(is.na(det), NA, det - e)
-})
 
 stats_delay <- summary(delay_glr)
 
@@ -228,9 +281,7 @@ cat("\n================ DELAY (ATRASO) ====================\n")
 if(all(is.na(delay_glr))) {
   cat("Nenhum evento detectado para calcular delay.\n")
 } else {
-  # Verifica se existe o valor no summary antes de imprimir para evitar erro
   get_stat <- function(s, name) ifelse(name %in% names(s), as.numeric(s[name]), NA)
-  
   cat("Mínimo   :", get_stat(stats_delay, "Min."), "\n")
   cat("Mediana  :", get_stat(stats_delay, "Median"), "\n")
   cat("Média    :", round(get_stat(stats_delay, "Mean"), 2), "\n")
